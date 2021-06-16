@@ -1,0 +1,176 @@
+#!/usr/local/bin python
+# -*- coding: utf-8 -*-
+
+# Created on 202106121937
+# Author:     zhuoyin94 <zhuoyin94@163.com>
+# Github:     https://github.com/MichaelYin1994
+
+'''
+本模块(input_pipline.py)构建数据读取与预处理的pipline，并训练神经网络模型。
+'''
+
+import matplotlib.pyplot as plt
+import numpy as np
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import Model, layers
+from tensorflow.keras.optimizers import Adam
+
+GLOBAL_RANDOM_SEED = 192
+np.random.seed(GLOBAL_RANDOM_SEED)
+tf.random.set_seed(GLOBAL_RANDOM_SEED)
+
+gpus = tf.config.experimental.list_physical_devices('GPU')
+if gpus:
+    try:
+        # Restrict TensorFlow to only use the first GPU
+        tf.config.experimental.set_visible_devices(gpus[0], 'GPU')
+
+        # Currently, memory growth needs to be the same across GPUs
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+        logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+        print(len(gpus), 'Physical GPUs,', len(logical_gpus), 'Logical GPUs')
+    except RuntimeError as e:
+        # Memory growth must be set before GPUs have been initialized
+        print(e)
+# ----------------------------------------------------------------------------
+
+
+def build_model(verbose=False, is_compile=True, **kwargs):
+    '''构造preprocessing与model的pipline，并返回编译过的模型。'''
+
+    # 解析preprocessing与model的参数
+    # ---------------------
+    input_shape = kwargs.pop('input_shape', (None, 224, 224))
+    n_classes = kwargs.pop('n_classes', 1000)
+
+    # 构造data input与preprocessing的pipline
+    # ---------------------
+    layer_input = keras.Input(shape=input_shape, name='layer_input')
+
+    layer_data_augmentation = keras.Sequential(
+        [
+            layers.experimental.preprocessing.RandomFlip('horizontal'),
+            layers.experimental.preprocessing.RandomRotation(0.1),
+        ])
+    layer_input_aug = layer_data_augmentation(layer_input)
+    layer_input_aug = layers.experimental.preprocessing.Rescaling(
+        1 / 255)(layer_input)
+
+    # 构造Model的pipline
+    # ---------------------
+    x = layers.Conv2D(32, 3, strides=2, padding='same')(layer_input_aug)
+    x = layers.BatchNormalization()(x)
+    x = layers.Activation('relu')(x)
+
+    x = layers.Conv2D(64, 3, padding='same')(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.Activation('relu')(x)
+
+    previous_block_activation = x  # Set aside residual
+
+    for size in [128, 256]:
+        x = layers.Activation('relu')(x)
+        x = layers.SeparableConv2D(size, 3, padding='same')(x)
+        x = layers.BatchNormalization()(x)
+
+        x = layers.Activation('relu')(x)
+        x = layers.SeparableConv2D(size, 3, padding='same')(x)
+        x = layers.BatchNormalization()(x)
+
+        x = layers.MaxPooling2D(3, strides=2, padding='same')(x)
+
+        # Project residual
+        residual = layers.Conv2D(size, 1, strides=2, padding='same')(
+            previous_block_activation
+        )
+        x = layers.add([x, residual])  # Add back residual
+        previous_block_activation = x  # Set aside next residual
+
+    x = layers.SeparableConv2D(1024, 3, padding='same')(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.Activation('relu')(x)
+
+    x = layers.GlobalAveragePooling2D()(x)
+    if n_classes == 2:
+        activation = 'sigmoid'
+        units = 1
+    else:
+        activation = 'softmax'
+        units = n_classes
+
+    x = layers.Dropout(0.5)(x)
+    layer_output = layers.Dense(units, activation=activation)(x)
+
+    # 编译模型
+    # ---------------------
+    model = Model(
+        layer_input, layer_output)
+
+    if verbose:
+        model.summary()
+
+    if is_compile:
+        model.compile(
+            loss='binary_crossentropy',
+            optimizer=Adam(0.0001),
+            metrics=['accuracy'])
+
+    return model
+
+
+if __name__ == '__main__':
+    # 全局化的参数列表
+    # ---------------------
+    IMAGE_SIZE = (224, 224)
+    BATCH_SIZE = 10
+    NUM_EPOCHES = 128
+    EARLY_STOP_ROUNDS = 15
+    MODEL_NAME = 'Resnet_bigtransfer'
+
+    IS_SEND_MSG_TO_DINGTALK = False
+    IS_DEBUG = True
+
+    if IS_DEBUG:
+        TRAIN_PATH = './data/Train_debug/'
+        VALID_PATH = './data/Val_debug/'
+    else:
+        TRAIN_PATH = './data/Train/'
+        VALID_PATH = './data/Val/'
+
+    # 利用tensorflow的preprocessing方法读取数据集
+    # ---------------------
+    train_ds = tf.keras.preprocessing.image_dataset_from_directory(
+        TRAIN_PATH,
+        label_mode='categorical',
+        validation_split=0,
+        seed=GLOBAL_RANDOM_SEED,
+        image_size=IMAGE_SIZE,
+        batch_size=BATCH_SIZE)
+    val_ds = tf.keras.preprocessing.image_dataset_from_directory(
+        VALID_PATH,
+        label_mode='categorical',
+        validation_split=0,
+        seed=GLOBAL_RANDOM_SEED,
+        image_size=IMAGE_SIZE,
+        batch_size=BATCH_SIZE)
+
+    train_ds = train_ds.prefetch(buffer_size=16)
+    val_ds = val_ds.prefetch(buffer_size=16)
+
+    # plt.figure(figsize=(10, 10))
+    # for images, labels in train_ds.take(1):
+    #     for i in range(9):
+    #         ax = plt.subplot(3, 3, i + 1)
+    #         plt.imshow(images[i].numpy().astype('uint8'))
+    #         plt.title(int(labels[i]))
+    #         plt.axis('off')
+    # plt.tight_layout()
+
+    # 构造与编译Model，并添加各种callback
+    # ---------------------
+    model = build_model(n_classes=21, input_shape=IMAGE_SIZE + (3,))
+    model.fit(
+        train_ds, epochs=NUM_EPOCHES, validation_data=val_ds,
+        )
