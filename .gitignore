@@ -3,6 +3,7 @@ cached_data/*
 plots/*
 models/*
 submissions/*
+ckpt/*
 __pycache__/*
 
 *.csv

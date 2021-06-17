@@ -125,9 +125,10 @@ if __name__ == '__main__':
     # ---------------------
     IMAGE_SIZE = (224, 224)
     BATCH_SIZE = 10
-    NUM_EPOCHES = 128
+    NUM_EPOCHS = 20
     EARLY_STOP_ROUNDS = 15
-    MODEL_NAME = 'Resnet_bigtransfer'
+    MODEL_NAME = 'resnet50v2'
+    CKPT_PATH = './ckpt/'
 
     IS_SEND_MSG_TO_DINGTALK = False
     IS_DEBUG = True
@@ -135,15 +136,18 @@ if __name__ == '__main__':
     if IS_DEBUG:
         TRAIN_PATH = './data/Train_debug/'
         VALID_PATH = './data/Val_debug/'
+        TEST_PATH = './data/Test_debug/'
     else:
         TRAIN_PATH = './data/Train/'
         VALID_PATH = './data/Val/'
+        TEST_PATH = './data/Test/Public_test_new/'
 
     # 利用tensorflow的preprocessing方法读取数据集
     # ---------------------
     train_ds = tf.keras.preprocessing.image_dataset_from_directory(
         TRAIN_PATH,
         label_mode='categorical',
+        shuffle=True,
         validation_split=0,
         seed=GLOBAL_RANDOM_SEED,
         image_size=IMAGE_SIZE,
@@ -151,13 +155,22 @@ if __name__ == '__main__':
     val_ds = tf.keras.preprocessing.image_dataset_from_directory(
         VALID_PATH,
         label_mode='categorical',
+        shuffle=True,
         validation_split=0,
         seed=GLOBAL_RANDOM_SEED,
         image_size=IMAGE_SIZE,
         batch_size=BATCH_SIZE)
+    # test_ds = tf.keras.preprocessing.image_dataset_from_directory(
+    #     TEST_PATH,
+    #     shuffle=False,
+    #     label_mode=None,
+    #     validation_split=0,
+    #     seed=GLOBAL_RANDOM_SEED,
+    #     image_size=IMAGE_SIZE,
+    #     batch_size=BATCH_SIZE)
 
-    train_ds = train_ds.prefetch(buffer_size=16)
-    val_ds = val_ds.prefetch(buffer_size=16)
+    train_ds = train_ds.prefetch(buffer_size=32)
+    val_ds = val_ds.prefetch(buffer_size=32)
 
     # plt.figure(figsize=(10, 10))
     # for images, labels in train_ds.take(1):
@@ -170,7 +183,24 @@ if __name__ == '__main__':
 
     # 构造与编译Model，并添加各种callback
     # ---------------------
+
+    # 各种Callbacks
+    # ckpt, lr schule, early stop, warm up, remote moniter
+    callbacks = [
+        tf.keras.callbacks.EarlyStopping(
+            monitor="val_accuracy", mode="max",
+            verbose=1, patience=EARLY_STOP_ROUNDS,
+            restore_best_weights=True),
+        tf.keras.callbacks.ModelCheckpoint(
+            filepath=(CKPT_PATH + MODEL_NAME,
+                      '_rounds_{epoch}_valacc_{val_accuracy}.h5'),
+            monitor='val_accuracy',
+            mode='max',
+            save_best_only=True)]
+
+    # 训练模型
     model = build_model(n_classes=21, input_shape=IMAGE_SIZE + (3,))
     model.fit(
-        train_ds, epochs=NUM_EPOCHES, validation_data=val_ds,
+        train_ds, epochs=NUM_EPOCHS,
+        validation_data=val_ds, callbacks=callbacks,
         )
