@@ -10,6 +10,7 @@
 '''
 
 import os
+import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
@@ -71,7 +72,7 @@ def build_model(verbose=False, is_compile=True, **kwargs):
 
     previous_block_activation = x
 
-    for size in [128, 256]:
+    for size in [128, 128]:
         x = layers.Activation('relu')(x)
         x = layers.SeparableConv2D(size, 3, padding='same')(x)
         x = layers.BatchNormalization()(x)
@@ -126,7 +127,7 @@ if __name__ == '__main__':
     # ---------------------
     IMAGE_SIZE = (224, 224)
     BATCH_SIZE = 4
-    NUM_EPOCHS = 20
+    NUM_EPOCHS = 1
     EARLY_STOP_ROUNDS = 15
     MODEL_NAME = 'resnet50v2'
     CKPT_PATH = './ckpt/'
@@ -138,7 +139,7 @@ if __name__ == '__main__':
     if IS_DEBUG:
         TRAIN_PATH = './data/Train_debug/'
         VALID_PATH = './data/Val_debug/'
-        TEST_PATH = './data/Test_debug/'
+        TEST_PATH = './data/Test_debug/Public_test_new/'
     else:
         TRAIN_PATH = './data/Train/'
         VALID_PATH = './data/Val/'
@@ -162,17 +163,18 @@ if __name__ == '__main__':
         seed=GLOBAL_RANDOM_SEED,
         image_size=IMAGE_SIZE,
         batch_size=BATCH_SIZE)
-    # test_ds = tf.keras.preprocessing.image_dataset_from_directory(
-    #     TEST_PATH,
-    #     shuffle=False,
-    #     label_mode=None,
-    #     validation_split=0,
-    #     seed=GLOBAL_RANDOM_SEED,
-    #     image_size=IMAGE_SIZE,
-    #     batch_size=BATCH_SIZE)
+    test_ds = tf.keras.preprocessing.image_dataset_from_directory(
+        TEST_PATH,
+        shuffle=False,
+        label_mode=None,
+        validation_split=0,
+        seed=GLOBAL_RANDOM_SEED,
+        image_size=IMAGE_SIZE,
+        batch_size=BATCH_SIZE)
 
     train_ds = train_ds.prefetch(buffer_size=32)
     val_ds = val_ds.prefetch(buffer_size=32)
+    test_ds = test_ds.prefetch(buffer_size=32)
 
     # plt.figure(figsize=(10, 10))
     # for images, labels in train_ds.take(1):
@@ -207,11 +209,30 @@ if __name__ == '__main__':
 
     # 如果指定ckpt weights文件名，则从ckpt位置开始训练
     if IS_TRAIN_FROM_CKPT:
-        print('--------------Loading Weights--------------')
         latest_ckpt = tf.train.latest_checkpoint(CKPT_PATH)
         model.load_weights(latest_ckpt)
+    else:
+        ckpt_file_name_list = os.listdir(CKPT_PATH)
 
-    model.fit(
-        train_ds, epochs=NUM_EPOCHS,
-        validation_data=val_ds, callbacks=callbacks,
-        )
+        # https://www.geeksforgeeks.org/python-os-remove-method/
+        try:
+            for file_name in ckpt_file_name_list:
+                os.remove(os.path.join(CKPT_PATH, file_name))
+        except OSError:
+            print('File {} can not be deleted !'.format(file_name))
+
+    history = model.fit(
+        train_ds,
+        epochs=NUM_EPOCHS,
+        validation_data=val_ds,
+        callbacks=callbacks)
+
+    # 生成预测结果
+    # ---------------------
+    test_file_name_list = os.listdir(TEST_PATH)
+
+    test_pred_df = pd.DataFrame(
+        test_file_name_list, columns=['Id'])
+    test_pred_df['Predicted'] = np.argmax(model.predict(test_ds), axis=1)
+
+    test_pred_df.to_csv('./submissions/sub.csv', index=False)

@@ -6,5 +6,5 @@
 # Github:     https://github.com/MichaelYin1994
 
 '''
-本模块(model.py)构建并编译神经网络模型。
+本模块(model.py)构建并编译各种类型的神经网络模型。
 '''
