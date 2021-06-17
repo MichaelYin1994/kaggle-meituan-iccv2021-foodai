@@ -9,6 +9,7 @@
 本模块(input_pipline.py)构建数据读取与预处理的pipline，并训练神经网络模型。
 '''
 
+import os
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
@@ -68,7 +69,7 @@ def build_model(verbose=False, is_compile=True, **kwargs):
     x = layers.BatchNormalization()(x)
     x = layers.Activation('relu')(x)
 
-    previous_block_activation = x  # Set aside residual
+    previous_block_activation = x
 
     for size in [128, 256]:
         x = layers.Activation('relu')(x)
@@ -115,7 +116,7 @@ def build_model(verbose=False, is_compile=True, **kwargs):
         model.compile(
             loss='binary_crossentropy',
             optimizer=Adam(0.0001),
-            metrics=['accuracy'])
+            metrics=['acc'])
 
     return model
 
@@ -124,12 +125,13 @@ if __name__ == '__main__':
     # 全局化的参数列表
     # ---------------------
     IMAGE_SIZE = (224, 224)
-    BATCH_SIZE = 10
+    BATCH_SIZE = 4
     NUM_EPOCHS = 20
     EARLY_STOP_ROUNDS = 15
     MODEL_NAME = 'resnet50v2'
     CKPT_PATH = './ckpt/'
 
+    IS_TRAIN_FROM_CKPT = True
     IS_SEND_MSG_TO_DINGTALK = False
     IS_DEBUG = True
 
@@ -188,18 +190,27 @@ if __name__ == '__main__':
     # ckpt, lr schule, early stop, warm up, remote moniter
     callbacks = [
         tf.keras.callbacks.EarlyStopping(
-            monitor="val_accuracy", mode="max",
+            monitor="val_acc", mode="max",
             verbose=1, patience=EARLY_STOP_ROUNDS,
             restore_best_weights=True),
         tf.keras.callbacks.ModelCheckpoint(
-            filepath=(CKPT_PATH + MODEL_NAME,
-                      '_rounds_{epoch}_valacc_{val_accuracy}.h5'),
-            monitor='val_accuracy',
+            filepath=os.path.join(
+                CKPT_PATH,
+                MODEL_NAME + '_epoch_{epoch:02d}_valacc_{val_acc:.2f}.ckpt'),
+            monitor='val_acc',
             mode='max',
+            save_weights_only=True,
             save_best_only=True)]
 
     # 训练模型
     model = build_model(n_classes=21, input_shape=IMAGE_SIZE + (3,))
+
+    # 如果指定ckpt weights文件名，则从ckpt位置开始训练
+    if IS_TRAIN_FROM_CKPT:
+        print('--------------Loading Weights--------------')
+        latest_ckpt = tf.train.latest_checkpoint(CKPT_PATH)
+        model.load_weights(latest_ckpt)
+
     model.fit(
         train_ds, epochs=NUM_EPOCHS,
         validation_data=val_ds, callbacks=callbacks,
