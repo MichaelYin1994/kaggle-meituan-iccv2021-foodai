@@ -10,13 +10,16 @@
 '''
 
 import os
-import pandas as pd
+
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import Model, layers
 from tensorflow.keras.optimizers import Adam
+
+from dingtalk_remote_monitor import RemoteMonitorDingTalk
 
 GLOBAL_RANDOM_SEED = 192
 np.random.seed(GLOBAL_RANDOM_SEED)
@@ -72,7 +75,7 @@ def build_model(verbose=False, is_compile=True, **kwargs):
 
     previous_block_activation = x
 
-    for size in [128, 128]:
+    for size in [128, 256]:
         x = layers.Activation('relu')(x)
         x = layers.SeparableConv2D(size, 3, padding='same')(x)
         x = layers.BatchNormalization()(x)
@@ -126,14 +129,14 @@ if __name__ == '__main__':
     # 全局化的参数列表
     # ---------------------
     IMAGE_SIZE = (224, 224)
-    BATCH_SIZE = 4
-    NUM_EPOCHS = 1
-    EARLY_STOP_ROUNDS = 15
+    BATCH_SIZE = 64
+    NUM_EPOCHS = 60
+    EARLY_STOP_ROUNDS = 5
     MODEL_NAME = 'resnet50v2'
     CKPT_PATH = './ckpt/'
 
-    IS_TRAIN_FROM_CKPT = True
-    IS_SEND_MSG_TO_DINGTALK = False
+    IS_TRAIN_FROM_CKPT = False
+    IS_SEND_MSG_TO_DINGTALK = True
     IS_DEBUG = True
 
     if IS_DEBUG:
@@ -172,9 +175,9 @@ if __name__ == '__main__':
         image_size=IMAGE_SIZE,
         batch_size=BATCH_SIZE)
 
-    train_ds = train_ds.prefetch(buffer_size=32)
-    val_ds = val_ds.prefetch(buffer_size=32)
-    test_ds = test_ds.prefetch(buffer_size=32)
+    train_ds = train_ds.prefetch(buffer_size=64)
+    val_ds = val_ds.prefetch(buffer_size=64)
+    test_ds = test_ds.prefetch(buffer_size=64)
 
     # plt.figure(figsize=(10, 10))
     # for images, labels in train_ds.take(1):
@@ -202,7 +205,10 @@ if __name__ == '__main__':
             monitor='val_acc',
             mode='max',
             save_weights_only=True,
-            save_best_only=True)]
+            save_best_only=True),
+        RemoteMonitorDingTalk(
+            is_send_msg=IS_SEND_MSG_TO_DINGTALK,
+            model_name=MODEL_NAME)]
 
     # 训练模型
     model = build_model(n_classes=21, input_shape=IMAGE_SIZE + (3,))

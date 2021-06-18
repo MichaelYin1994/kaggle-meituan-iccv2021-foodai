@@ -5,16 +5,20 @@
 # Author:     zhuoyin94 <zhuoyin94@163.com>
 # Github:     https://github.com/MichaelYin1994
 
+'''
+利用钉钉（DingTalk）的API构建的训练监控机器人。
+'''
+
 import json
 import urllib.request
 from datetime import datetime
 
-import keras
+import tensorflow.keras as keras
 import numpy as np
 
 
 def send_msg_to_dingtalk(info_text, is_send_msg=False, is_print_msg=True):
-    '''发送消息给指定URL的钉钉机器人。'''
+    '''发送info_text给指定API_URL的钉钉机器人。'''
     if is_send_msg:
         API_URL = 'https://oapi.dingtalk.com/robot/send?access_token=d1b2a29b2ae62bc709693c02921ed097c621bc33e5963e9e0a5d5adf5eac10c1'
 
@@ -48,7 +52,14 @@ def send_msg_to_dingtalk(info_text, is_send_msg=False, is_print_msg=True):
 
 class RemoteMonitorDingTalk(keras.callbacks.Callback):
     '''
-    Requirements: datetime.datetime, json, urllib.request
+    在神经网络每一个batch训练结束之后，发送train和validation的信息给远程钉钉服务器。
+
+    @Attributes:
+    ----------
+    is_send_msg: {bool-like}
+        是否发送信息到远程服务器，若False，信息不进行发送。
+    model_name: {str-like}
+        该次训练的模型的名字。
     '''
     def __init__(self, is_send_msg=False, model_name=None):
         super(keras.callbacks.Callback, self).__init__()
@@ -56,14 +67,15 @@ class RemoteMonitorDingTalk(keras.callbacks.Callback):
         self.model_name = model_name
 
     def on_epoch_end(self, epoch, logs):
+        '''在每一个epoch之后，发送logs信息到远程服务器。'''
         log_keys = list(logs.keys())
         for k in log_keys:
             logs[k] = np.round(logs[k], 5)
 
         info_text = str(logs)
         if self.model_name is None:
-            info_text = '[INFO]Epoch: {}, '.format(epoch) + info_text
+            info_text = '[INFO] Epoch: {}, '.format(epoch) + info_text
         else:
             info_text = '[INFO][{}] Epoch: {}, '.format(self.model_name, epoch) + info_text
-        send_msg_to_dingtalk(info_text, is_send_msg=self.is_send_msg,
-                             is_print_msg=False)
+        send_msg_to_dingtalk(
+            info_text, is_send_msg=self.is_send_msg, is_print_msg=False)
