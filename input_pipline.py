@@ -25,19 +25,20 @@ GLOBAL_RANDOM_SEED = 192
 np.random.seed(GLOBAL_RANDOM_SEED)
 tf.random.set_seed(GLOBAL_RANDOM_SEED)
 
+GPU_ID = 0
+
 gpus = tf.config.experimental.list_physical_devices('GPU')
 if gpus:
     try:
-        # Restrict TensorFlow to only use the first GPU
-        tf.config.experimental.set_visible_devices(gpus[0], 'GPU')
+        # 限制Tensorflow只使用GPU ID编号的GPU
+        tf.config.experimental.set_visible_devices(gpus[GPU_ID], 'GPU')
 
-        # Currently, memory growth needs to be the same across GPUs
+        # 限制Tensorflow不占用所有显存
         for gpu in gpus:
             tf.config.experimental.set_memory_growth(gpu, True)
         logical_gpus = tf.config.experimental.list_logical_devices('GPU')
-        print(len(gpus), 'Physical GPUs,', len(logical_gpus), 'Logical GPUs')
+        # print(len(gpus), 'Physical GPUs,', len(logical_gpus), 'Logical GPUs')
     except RuntimeError as e:
-        # Memory growth must be set before GPUs have been initialized
         print(e)
 # ----------------------------------------------------------------------------
 
@@ -119,7 +120,7 @@ def build_model(verbose=False, is_compile=True, **kwargs):
     if is_compile:
         model.compile(
             loss='binary_crossentropy',
-            optimizer=Adam(0.0001),
+            optimizer=Adam(0.0003),
             metrics=['acc'])
 
     return model
@@ -130,14 +131,14 @@ if __name__ == '__main__':
     # ---------------------
     IMAGE_SIZE = (224, 224)
     BATCH_SIZE = 64
-    NUM_EPOCHS = 60
+    NUM_EPOCHS = 100
     EARLY_STOP_ROUNDS = 5
     MODEL_NAME = 'resnet50v2'
     CKPT_PATH = './ckpt/'
 
     IS_TRAIN_FROM_CKPT = False
     IS_SEND_MSG_TO_DINGTALK = True
-    IS_DEBUG = True
+    IS_DEBUG = False
 
     if IS_DEBUG:
         TRAIN_PATH = './data/Train_debug/'
@@ -201,7 +202,7 @@ if __name__ == '__main__':
         tf.keras.callbacks.ModelCheckpoint(
             filepath=os.path.join(
                 CKPT_PATH,
-                MODEL_NAME + '_epoch_{epoch:02d}_valacc_{val_acc:.2f}.ckpt'),
+                MODEL_NAME + '_epoch_{epoch:02d}_valacc_{val_acc:.3f}.ckpt'),
             monitor='val_acc',
             mode='max',
             save_weights_only=True,
@@ -211,7 +212,7 @@ if __name__ == '__main__':
             model_name=MODEL_NAME)]
 
     # 训练模型
-    model = build_model(n_classes=21, input_shape=IMAGE_SIZE + (3,))
+    model = build_model(n_classes=1000, input_shape=IMAGE_SIZE + (3,))
 
     # 如果指定ckpt weights文件名，则从ckpt位置开始训练
     if IS_TRAIN_FROM_CKPT:

@@ -60,11 +60,14 @@ class RemoteMonitorDingTalk(keras.callbacks.Callback):
         是否发送信息到远程服务器，若False，信息不进行发送。
     model_name: {str-like}
         该次训练的模型的名字。
+    gpu_id: {int-like}
+        当前模型使用的GPU的ID编号。
     '''
-    def __init__(self, is_send_msg=False, model_name=None):
+    def __init__(self, is_send_msg=False, model_name=None, gpu_id=0):
         super(keras.callbacks.Callback, self).__init__()
         self.is_send_msg = is_send_msg
         self.model_name = model_name
+        self.gpu_id = gpu_id
 
     def on_epoch_end(self, epoch, logs):
         '''在每一个epoch之后，发送logs信息到远程服务器。'''
@@ -76,6 +79,7 @@ class RemoteMonitorDingTalk(keras.callbacks.Callback):
         if self.model_name is None:
             info_text = '[INFO] Epoch: {}, '.format(epoch) + info_text
         else:
-            info_text = '[INFO][{}] Epoch: {}, '.format(self.model_name, epoch) + info_text
+            info_text = '[INFO][{}][GPU:{}] Epoch: {} '.format(self.model_name, epoch) + info_text
+
         send_msg_to_dingtalk(
             info_text, is_send_msg=self.is_send_msg, is_print_msg=False)
