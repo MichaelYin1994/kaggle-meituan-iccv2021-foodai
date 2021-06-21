@@ -120,7 +120,7 @@ def build_model(verbose=False, is_compile=True, **kwargs):
     if is_compile:
         model.compile(
             loss='binary_crossentropy',
-            optimizer=Adam(0.0003),
+            optimizer=Adam(0.1),
             metrics=['acc'])
 
     return model
@@ -130,15 +130,15 @@ if __name__ == '__main__':
     # 全局化的参数列表
     # ---------------------
     IMAGE_SIZE = (224, 224)
-    BATCH_SIZE = 64
+    BATCH_SIZE = 128
     NUM_EPOCHS = 100
     EARLY_STOP_ROUNDS = 5
     MODEL_NAME = 'resnet50v2'
-    CKPT_PATH = './ckpt/'
+    CKPT_PATH = './ckpt/resnet50v2/'
 
     IS_TRAIN_FROM_CKPT = False
-    IS_SEND_MSG_TO_DINGTALK = True
-    IS_DEBUG = False
+    IS_SEND_MSG_TO_DINGTALK = False
+    IS_DEBUG = True
 
     if IS_DEBUG:
         TRAIN_PATH = './data/Train_debug/'
@@ -176,9 +176,9 @@ if __name__ == '__main__':
         image_size=IMAGE_SIZE,
         batch_size=BATCH_SIZE)
 
-    train_ds = train_ds.prefetch(buffer_size=64)
-    val_ds = val_ds.prefetch(buffer_size=64)
-    test_ds = test_ds.prefetch(buffer_size=64)
+    train_ds = train_ds.prefetch(buffer_size=128)
+    val_ds = val_ds.prefetch(buffer_size=128)
+    test_ds = test_ds.prefetch(buffer_size=128)
 
     # plt.figure(figsize=(10, 10))
     # for images, labels in train_ds.take(1):
@@ -196,7 +196,7 @@ if __name__ == '__main__':
     # ckpt, lr schule, early stop, warm up, remote moniter
     callbacks = [
         tf.keras.callbacks.EarlyStopping(
-            monitor="val_acc", mode="max",
+            monitor='val_acc', mode="max",
             verbose=1, patience=EARLY_STOP_ROUNDS,
             restore_best_weights=True),
         tf.keras.callbacks.ModelCheckpoint(
@@ -207,12 +207,18 @@ if __name__ == '__main__':
             mode='max',
             save_weights_only=True,
             save_best_only=True),
+        tf.keras.callbacks.ReduceLROnPlateau(
+                monitor='val_acc',
+                factor=0.3,
+                patience=3,
+                min_lr=0.0003),
         RemoteMonitorDingTalk(
             is_send_msg=IS_SEND_MSG_TO_DINGTALK,
-            model_name=MODEL_NAME)]
+            model_name=MODEL_NAME,
+            gpu_id=GPU_ID)]
 
     # 训练模型
-    model = build_model(n_classes=1000, input_shape=IMAGE_SIZE + (3,))
+    model = build_model(n_classes=21, input_shape=IMAGE_SIZE + (3,))
 
     # 如果指定ckpt weights文件名，则从ckpt位置开始训练
     if IS_TRAIN_FROM_CKPT:
