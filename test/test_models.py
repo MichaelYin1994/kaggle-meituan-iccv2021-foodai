@@ -57,12 +57,11 @@ def test_residual_module_v1():
     layer_input = keras.Input(shape=input_shape)
 
     x = residual_module_v1(
-        layer_input, n_filters=256, n_blocks=4, stride=2, name='resnetv1')
+        layer_input, n_filters=256, n_blocks=6, stride=1, name='resnetv1')
 
     return None
 
 
 if __name__ == '__main__':
-    test_residual_block_v1()
-
+    # test_residual_block_v1()
     test_residual_module_v1()
