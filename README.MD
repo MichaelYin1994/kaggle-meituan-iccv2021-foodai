@@ -37,5 +37,5 @@
 文件结构说明：
 - **./data/**：用于存储原始数据，并切分了部分原始数据便于调试。
 - **./ckpt/**：模型训练权重checkpoint存储位置。
-- **./cached_data/**：预处理后的零时数据，后续用于存储tfrecord形式的数据，加速IO过程。
+- **./cached_data/**：用于存储预处理后的临时数据，后续用于存储tfrecord形式的数据，加速IO过程。
 - **./submissions/**：用于存储模型预测的测试集待提交的submissions结果。

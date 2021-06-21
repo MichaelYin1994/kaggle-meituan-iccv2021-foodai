@@ -120,7 +120,7 @@ def build_model(verbose=False, is_compile=True, **kwargs):
     if is_compile:
         model.compile(
             loss='binary_crossentropy',
-            optimizer=Adam(0.1),
+            optimizer=Adam(0.05),
             metrics=['acc'])
 
     return model

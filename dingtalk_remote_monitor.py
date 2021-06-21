@@ -64,7 +64,7 @@ class RemoteMonitorDingTalk(keras.callbacks.Callback):
         当前模型使用的GPU的ID编号。
     '''
     def __init__(self, is_send_msg=False, model_name=None, gpu_id=0):
-        super(keras.callbacks.Callback, self).__init__()
+        super(RemoteMonitorDingTalk, self).__init__()
         self.is_send_msg = is_send_msg
         self.model_name = model_name
         self.gpu_id = gpu_id
