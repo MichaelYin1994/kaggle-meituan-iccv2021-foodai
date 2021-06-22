@@ -10,14 +10,14 @@
 '''
 
 import sys
+
 sys.path.append('..')
 
 import tensorflow as tf
-from tensorflow.keras import backend
+from models import (residual_block_v1, residual_block_v2, residual_module_v1,
+                    residual_module_v2)
 from tensorflow import keras
-from tensorflow.keras import layers
-
-from models import residual_block_v1, residual_module_v1
+from tensorflow.keras import backend, layers
 
 # ----------------------------------------------------------------------------
 
@@ -62,6 +62,37 @@ def test_residual_module_v1():
     return None
 
 
+def test_residual_block_v2():
+    '''对于models.residual_block_v1的测试'''
+    input_shape = (224, 224, 128 * 4)
+
+    # 输入为channel last的一张image
+    layer_input = keras.Input(shape=input_shape)
+
+    x = residual_block_v2(
+        layer_input, n_filters=128, kernel_size=3, stride=1,
+        conv_shortcut=False, name='initial')
+    assert [None, 224, 224, 512] == x.get_shape().as_list()
+
+    return None
+
+
+def test_residual_module_v2():
+    '''对于models.residual_block_v1的测试'''
+    input_shape = (224, 224, 3)
+
+    # 输入为channel last的一张image
+    layer_input = keras.Input(shape=input_shape)
+
+    x = residual_module_v2(
+        layer_input, n_filters=256, n_blocks=6, stride=1, name='resnetv2')
+
+    return None
+
+
 if __name__ == '__main__':
     # test_residual_block_v1()
-    test_residual_module_v1()
+    # test_residual_module_v1()
+
+    test_residual_block_v2()
+    test_residual_module_v2()
