@@ -20,6 +20,7 @@ from tensorflow.keras import Model, layers
 from tensorflow.keras.optimizers import Adam
 
 from dingtalk_remote_monitor import RemoteMonitorDingTalk
+from models import build_model_resnet50_v2
 
 GLOBAL_RANDOM_SEED = 192
 np.random.seed(GLOBAL_RANDOM_SEED)
@@ -66,37 +67,7 @@ def build_model(verbose=False, is_compile=True, **kwargs):
 
     # 构造Model的pipline
     # ---------------------
-    x = layers.Conv2D(32, 3, strides=2, padding='same')(layer_input_aug)
-    x = layers.BatchNormalization()(x)
-    x = layers.Activation('relu')(x)
-
-    x = layers.Conv2D(64, 3, padding='same')(x)
-    x = layers.BatchNormalization()(x)
-    x = layers.Activation('relu')(x)
-
-    previous_block_activation = x
-
-    for size in [128, 256]:
-        x = layers.Activation('relu')(x)
-        x = layers.SeparableConv2D(size, 3, padding='same')(x)
-        x = layers.BatchNormalization()(x)
-
-        x = layers.Activation('relu')(x)
-        x = layers.SeparableConv2D(size, 3, padding='same')(x)
-        x = layers.BatchNormalization()(x)
-
-        x = layers.MaxPooling2D(3, strides=2, padding='same')(x)
-
-        # Project residual
-        residual = layers.Conv2D(size, 1, strides=2, padding='same')(
-            previous_block_activation
-        )
-        x = layers.add([x, residual])  # Add back residual
-        previous_block_activation = x  # Set aside next residual
-
-    x = layers.SeparableConv2D(1024, 3, padding='same')(x)
-    x = layers.BatchNormalization()(x)
-    x = layers.Activation('relu')(x)
+    x = build_model_resnet50_v2(layer_input_aug)
 
     x = layers.GlobalAveragePooling2D()(x)
     if n_classes == 2:
@@ -111,8 +82,7 @@ def build_model(verbose=False, is_compile=True, **kwargs):
 
     # 编译模型
     # ---------------------
-    model = Model(
-        layer_input, layer_output)
+    model = Model(layer_input, layer_output)
 
     if verbose:
         model.summary()
@@ -132,7 +102,7 @@ if __name__ == '__main__':
     IMAGE_SIZE = (224, 224)
     BATCH_SIZE = 128
     NUM_EPOCHS = 100
-    EARLY_STOP_ROUNDS = 5
+    EARLY_STOP_ROUNDS = 10
     MODEL_NAME = 'resnet50v2'
     CKPT_PATH = './ckpt/resnet50v2/'
 
