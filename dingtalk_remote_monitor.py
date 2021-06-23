@@ -79,7 +79,7 @@ class RemoteMonitorDingTalk(keras.callbacks.Callback):
         if self.model_name is None:
             info_text = '[INFO] Epoch: {}, '.format(epoch) + info_text
         else:
-            info_text = '[INFO][{}][GPU:{}] Epoch: {} '.format(
+            info_text = '[INFO][{}][GPU: {}] Epoch: {} '.format(
                 self.model_name, self.gpu_id, epoch) + info_text
 
         send_msg_to_dingtalk(

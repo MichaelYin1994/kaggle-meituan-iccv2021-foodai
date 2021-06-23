@@ -6,7 +6,7 @@
 # Github:     https://github.com/MichaelYin1994
 
 '''
-本模块(input_pipline.py)构建数据读取与预处理的pipline，并训练神经网络模型。
+本模块(input_pipeline.py)构建数据读取与预处理的pipline，并训练神经网络模型。
 '''
 
 import os
@@ -20,13 +20,13 @@ from tensorflow.keras import Model, layers
 from tensorflow.keras.optimizers import Adam
 
 from dingtalk_remote_monitor import RemoteMonitorDingTalk
-from models import build_model_resnet50_v2
+from models import build_model_resnet50_v2, build_model_resnet101_v2
 
 GLOBAL_RANDOM_SEED = 192
 np.random.seed(GLOBAL_RANDOM_SEED)
 tf.random.set_seed(GLOBAL_RANDOM_SEED)
 
-GPU_ID = 0
+GPU_ID = 1
 
 gpus = tf.config.experimental.list_physical_devices('GPU')
 if gpus:
@@ -46,6 +46,7 @@ if gpus:
 
 def build_model(verbose=False, is_compile=True, **kwargs):
     '''构造preprocessing与model的pipline，并返回编译过的模型。'''
+    network_type = kwargs.pop('network_type', 'resnet50')
 
     # 解析preprocessing与model的参数
     # ---------------------
@@ -67,7 +68,10 @@ def build_model(verbose=False, is_compile=True, **kwargs):
 
     # 构造Model的pipline
     # ---------------------
-    x = build_model_resnet50_v2(layer_input_aug)
+    if 'resnet50' in network_type: 
+        x = build_model_resnet50_v2(layer_input_aug)
+    elif 'resnet101' in network_type:
+        x = build_model_resnet101_v2(layer_input_aug)
 
     x = layers.GlobalAveragePooling2D()(x)
     if n_classes == 2:
@@ -90,7 +94,7 @@ def build_model(verbose=False, is_compile=True, **kwargs):
     if is_compile:
         model.compile(
             loss='binary_crossentropy',
-            optimizer=Adam(0.05),
+            optimizer=Adam(0.0005),
             metrics=['acc'])
 
     return model
@@ -103,21 +107,23 @@ if __name__ == '__main__':
     BATCH_SIZE = 128
     NUM_EPOCHS = 100
     EARLY_STOP_ROUNDS = 10
-    MODEL_NAME = 'resnet50v2'
-    CKPT_PATH = './ckpt/resnet50v2/'
+    MODEL_NAME = 'resnet101v2_gv100'
+    CKPT_PATH = './ckpt/{}/'.format(MODEL_NAME)
 
     IS_TRAIN_FROM_CKPT = False
-    IS_SEND_MSG_TO_DINGTALK = False
-    IS_DEBUG = True
+    IS_SEND_MSG_TO_DINGTALK = True
+    IS_DEBUG = False
 
     if IS_DEBUG:
         TRAIN_PATH = './data/Train_debug/'
         VALID_PATH = './data/Val_debug/'
         TEST_PATH = './data/Test_debug/Public_test_new/'
+        N_CLASSES = len(os.listdir(TRAIN_PATH))
     else:
         TRAIN_PATH = './data/Train/'
         VALID_PATH = './data/Val/'
         TEST_PATH = './data/Test/Public_test_new/'
+        N_CLASSES = 1000
 
     # 利用tensorflow的preprocessing方法读取数据集
     # ---------------------
@@ -188,7 +194,14 @@ if __name__ == '__main__':
             gpu_id=GPU_ID)]
 
     # 训练模型
-    model = build_model(n_classes=21, input_shape=IMAGE_SIZE + (3,))
+    model = build_model(
+        n_classes=N_CLASSES,
+        input_shape=IMAGE_SIZE + (3,),
+        network_type=MODEL_NAME)
+
+    # 如果模型名的ckpt文件夹不存在，创建该文件夹
+    if MODEL_NAME not in os.listdir('./ckpt'):
+        os.mkdir('./ckpt/' + MODEL_NAME)
 
     # 如果指定ckpt weights文件名，则从ckpt位置开始训练
     if IS_TRAIN_FROM_CKPT:

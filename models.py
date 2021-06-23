@@ -22,6 +22,44 @@ from tensorflow import keras
 from tensorflow.keras import layers
 
 # ----------------------------------------------------------------------------
+def build_model_resnet101_v2(layer_input, is_use_bias=True):
+    '''
+    用Residual Module V2构造一个未编译的Resnet 101模型。
+
+    @Args:
+    ----------
+    layer_input: {tensor-like}
+        输入的tensor，是keras的layer。
+    is_use_bias: {bool-like}
+        是否在特征抽取的conv层使用bias。
+
+    @Returns:
+    ----------
+    构造好的未编译的Resnet101 V2模型。
+    '''
+    bn_axis = 3 if backend.image_data_format() == 'channels_last' else 1
+
+    # Conv特征抽取层
+    x = layers.ZeroPadding2D(
+        padding=((3, 3), (3, 3)), name='conv1_pad')(layer_input)
+    x = layers.Conv2D(64, 7, strides=2, use_bias=is_use_bias, name='conv1_conv')(x)
+
+    # Pre-activation && Pooling
+    x = layers.BatchNormalization(
+        axis=bn_axis, epsilon=1.001e-5, name='conv1_bn')(x)
+    x = layers.Activation('relu', name='conv1_relu')(x)
+
+    x = layers.ZeroPadding2D(padding=((1, 1), (1, 1)), name='pool1_pad')(x)
+    x = layers.MaxPooling2D(3, strides=2, name='pool1_pool')(x)
+
+    # 残差组件堆叠
+    x = residual_module_v2(x, n_blocks=3, n_filters=64, name='conv2')
+    x = residual_module_v2(x, n_blocks=4, n_filters=128, name='conv3')
+    x = residual_module_v2(x, n_blocks=23, n_filters=256, name='conv4')
+    x = residual_module_v2(x, n_blocks=3, n_filters=512, name='conv5')
+
+    return x
+
 
 def build_model_resnet50_v2(layer_input, is_use_bias=False):
     '''
