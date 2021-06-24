@@ -26,7 +26,7 @@ GLOBAL_RANDOM_SEED = 192
 np.random.seed(GLOBAL_RANDOM_SEED)
 tf.random.set_seed(GLOBAL_RANDOM_SEED)
 
-GPU_ID = 1
+GPU_ID = 0
 
 gpus = tf.config.experimental.list_physical_devices('GPU')
 if gpus:
@@ -60,11 +60,11 @@ def build_model(verbose=False, is_compile=True, **kwargs):
     layer_data_augmentation = keras.Sequential(
         [
             layers.experimental.preprocessing.RandomFlip('horizontal'),
-            layers.experimental.preprocessing.RandomRotation(0.1),
+            layers.experimental.preprocessing.RandomRotation(0.2),
         ])
     layer_input_aug = layer_data_augmentation(layer_input)
     layer_input_aug = layers.experimental.preprocessing.Rescaling(
-        1 / 255)(layer_input)
+        1 / 255)(layer_input_aug)
 
     # 构造Model的pipline
     # ---------------------
@@ -94,7 +94,7 @@ def build_model(verbose=False, is_compile=True, **kwargs):
     if is_compile:
         model.compile(
             loss='binary_crossentropy',
-            optimizer=Adam(0.0005),
+            optimizer=Adam(0.00003),
             metrics=['acc'])
 
     return model
@@ -104,15 +104,15 @@ if __name__ == '__main__':
     # 全局化的参数列表
     # ---------------------
     IMAGE_SIZE = (224, 224)
-    BATCH_SIZE = 128
-    NUM_EPOCHS = 100
+    BATCH_SIZE = 512
+    NUM_EPOCHS = 2
     EARLY_STOP_ROUNDS = 10
-    MODEL_NAME = 'resnet101v2_gv100'
+    MODEL_NAME = 'resnet50v2_gv100'
     CKPT_PATH = './ckpt/{}/'.format(MODEL_NAME)
 
     IS_TRAIN_FROM_CKPT = False
-    IS_SEND_MSG_TO_DINGTALK = True
-    IS_DEBUG = False
+    IS_SEND_MSG_TO_DINGTALK = False
+    IS_DEBUG = True
 
     if IS_DEBUG:
         TRAIN_PATH = './data/Train_debug/'
@@ -123,7 +123,7 @@ if __name__ == '__main__':
         TRAIN_PATH = './data/Train/'
         VALID_PATH = './data/Val/'
         TEST_PATH = './data/Test/Public_test_new/'
-        N_CLASSES = 1000
+        N_CLASSES = 21
 
     # 利用tensorflow的preprocessing方法读取数据集
     # ---------------------
@@ -152,9 +152,9 @@ if __name__ == '__main__':
         image_size=IMAGE_SIZE,
         batch_size=BATCH_SIZE)
 
-    train_ds = train_ds.prefetch(buffer_size=128)
-    val_ds = val_ds.prefetch(buffer_size=128)
-    test_ds = test_ds.prefetch(buffer_size=128)
+    train_ds = train_ds.prefetch(buffer_size=1024)
+    val_ds = val_ds.prefetch(buffer_size=1024)
+    test_ds = test_ds.prefetch(buffer_size=1024)
 
     # plt.figure(figsize=(10, 10))
     # for images, labels in train_ds.take(1):
