@@ -39,6 +39,7 @@ def test_residual_block_v1():
         conv_shortcut=True, name='initial')
     assert [None, 112, 112, 512] == x.get_shape().as_list()
 
+    # 无法通过测试，conv_shortcut短接时为clean的通道
     try:
         x = residual_block_v1(
             layer_input, n_filters=128, kernel_size=3, stride=2,
@@ -57,7 +58,7 @@ def test_residual_module_v1():
     layer_input = keras.Input(shape=input_shape)
 
     x = residual_module_v1(
-        layer_input, n_filters=256, n_blocks=6, stride=1, name='resnetv1')
+        layer_input, n_filters=64, n_blocks=6, stride=1, name='resnetv1')
 
     return None
 
@@ -73,6 +74,18 @@ def test_residual_block_v2():
         layer_input, n_filters=128, kernel_size=3, stride=1,
         conv_shortcut=False, name='initial')
     assert [None, 224, 224, 512] == x.get_shape().as_list()
+
+    # 是否使用conv_shortcut都可以通过测试，v2的block的shortcut有特殊
+    # feature map缩减的方法
+    x = residual_block_v2(
+        layer_input, n_filters=128, kernel_size=3, stride=2,
+        conv_shortcut=True, name='initial')
+    assert [None, 112, 112, 512] == x.get_shape().as_list()
+
+    x = residual_block_v2(
+        layer_input, n_filters=128, kernel_size=3, stride=2,
+        conv_shortcut=False, name='initial')
+    assert [None, 112, 112, 512] == x.get_shape().as_list()
 
     return None
 
@@ -91,8 +104,8 @@ def test_residual_module_v2():
 
 
 if __name__ == '__main__':
-    # test_residual_block_v1()
-    # test_residual_module_v1()
+    test_residual_block_v1()
+    test_residual_module_v1()
 
     test_residual_block_v2()
     test_residual_module_v2()

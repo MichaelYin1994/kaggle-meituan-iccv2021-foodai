@@ -251,7 +251,7 @@ def residual_module_v1(x, n_filters, n_blocks, stride=2, name=None):
     一个构造好的残差组件。
     '''
     # 基础特征图抽取
-    x = residual_block_v1(x, n_filters, stride=stride, name=name + '_block1')
+    x = residual_block_v1(x, n_filters, conv_shortcut=True, stride=stride, name=name + '_block1')
 
     # Residual block叠加，残差连接没有升维操作
     for i in range(2, n_blocks + 1):
