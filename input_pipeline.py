@@ -10,6 +10,7 @@
 '''
 
 import os
+import multiprocessing as mp
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -94,23 +95,35 @@ def build_model(verbose=False, is_compile=True, **kwargs):
     if is_compile:
         model.compile(
             loss='binary_crossentropy',
-            optimizer=Adam(0.00003),
+            optimizer=Adam(0.00005),
             metrics=['acc'])
 
     return model
+
+
+def load_preprocess_image(image_size=None):
+    '''Load a single image.'''
+
+    def fcn(path=None):
+        image = tf.io.read_file(path)
+        image = tf.image.decode_jpeg(image, channels=3)
+        image = tf.image.resize(image, image_size)
+        return image
+
+    return fcn
 
 
 if __name__ == '__main__':
     # 全局化的参数列表
     # ---------------------
     IMAGE_SIZE = (224, 224)
-    BATCH_SIZE = 512
-    NUM_EPOCHS = 2
+    BATCH_SIZE = 32
+    NUM_EPOCHS = 0
     EARLY_STOP_ROUNDS = 10
     MODEL_NAME = 'resnet50v2_gv100'
     CKPT_PATH = './ckpt/{}/'.format(MODEL_NAME)
 
-    IS_TRAIN_FROM_CKPT = False
+    IS_TRAIN_FROM_CKPT = True
     IS_SEND_MSG_TO_DINGTALK = False
     IS_DEBUG = True
 
@@ -134,7 +147,8 @@ if __name__ == '__main__':
         validation_split=0,
         seed=GLOBAL_RANDOM_SEED,
         image_size=IMAGE_SIZE,
-        batch_size=BATCH_SIZE)
+        batch_size=BATCH_SIZE
+    )
     val_ds = tf.keras.preprocessing.image_dataset_from_directory(
         VALID_PATH,
         label_mode='categorical',
@@ -142,19 +156,11 @@ if __name__ == '__main__':
         validation_split=0,
         seed=GLOBAL_RANDOM_SEED,
         image_size=IMAGE_SIZE,
-        batch_size=BATCH_SIZE)
-    test_ds = tf.keras.preprocessing.image_dataset_from_directory(
-        TEST_PATH,
-        shuffle=False,
-        label_mode=None,
-        validation_split=0,
-        seed=GLOBAL_RANDOM_SEED,
-        image_size=IMAGE_SIZE,
-        batch_size=BATCH_SIZE)
+        batch_size=BATCH_SIZE
+    )
 
-    train_ds = train_ds.prefetch(buffer_size=1024)
-    val_ds = val_ds.prefetch(buffer_size=1024)
-    test_ds = test_ds.prefetch(buffer_size=1024)
+    train_ds = train_ds.prefetch(buffer_size=64)
+    val_ds = val_ds.prefetch(buffer_size=64)
 
     # plt.figure(figsize=(10, 10))
     # for images, labels in train_ds.take(1):
@@ -185,19 +191,21 @@ if __name__ == '__main__':
             save_best_only=True),
         tf.keras.callbacks.ReduceLROnPlateau(
                 monitor='val_acc',
-                factor=0.3,
+                factor=0.5,
                 patience=3,
-                min_lr=0.0003),
+                min_lr=0.0000003),
         RemoteMonitorDingTalk(
             is_send_msg=IS_SEND_MSG_TO_DINGTALK,
             model_name=MODEL_NAME,
-            gpu_id=GPU_ID)]
+            gpu_id=GPU_ID)
+    ]
 
     # 训练模型
     model = build_model(
         n_classes=N_CLASSES,
         input_shape=IMAGE_SIZE + (3,),
-        network_type=MODEL_NAME)
+        network_type=MODEL_NAME
+    )
 
     # 如果模型名的ckpt文件夹不存在，创建该文件夹
     if MODEL_NAME not in os.listdir('./ckpt'):
@@ -221,14 +229,27 @@ if __name__ == '__main__':
         train_ds,
         epochs=NUM_EPOCHS,
         validation_data=val_ds,
-        callbacks=callbacks)
+        callbacks=callbacks
+    )
 
     # 生成预测结果
     # ---------------------
     test_file_name_list = os.listdir(TEST_PATH)
+    test_file_fullname_list = [TEST_PATH + item for item in test_file_name_list]
+
+    test_path_ds = tf.data.Dataset.from_tensor_slices(test_file_fullname_list)
+    load_preprocess_test_image = load_preprocess_image(image_size=IMAGE_SIZE)
+    test_ds = test_path_ds.map(
+        load_preprocess_test_image,
+        num_parallel_calls=mp.cpu_count()
+    )
+    test_ds = test_ds.batch(32)
+    test_ds = test_ds.prefetch(buffer_size=64)
+    test_pred_proba = model.predict(test_ds)
 
     test_pred_df = pd.DataFrame(
-        test_file_name_list, columns=['Id'])
-    test_pred_df['Predicted'] = np.argmax(model.predict(test_ds), axis=1)
-
+        test_file_name_list,
+        columns=['Id']
+    )
+    test_pred_df['Predicted'] = np.argmax(test_pred_proba, axis=1)
     test_pred_df.to_csv('./submissions/sub.csv', index=False)
