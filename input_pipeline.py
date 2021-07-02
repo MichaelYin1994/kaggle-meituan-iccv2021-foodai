@@ -19,15 +19,17 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import Model, layers
 from tensorflow.keras.optimizers import Adam
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import OneHotEncoder
 
 from dingtalk_remote_monitor import RemoteMonitorDingTalk
 from models import build_model_resnet50_v2, build_model_resnet101_v2
 
-GLOBAL_RANDOM_SEED = 192
+GLOBAL_RANDOM_SEED = 65535
 np.random.seed(GLOBAL_RANDOM_SEED)
 tf.random.set_seed(GLOBAL_RANDOM_SEED)
 
-GPU_ID = 0
+GPU_ID = 1
 
 gpus = tf.config.experimental.list_physical_devices('GPU')
 if gpus:
@@ -65,7 +67,7 @@ def build_model(verbose=False, is_compile=True, **kwargs):
         ])
     layer_input_aug = layer_data_augmentation(layer_input)
     layer_input_aug = layers.experimental.preprocessing.Rescaling(
-        1 / 255)(layer_input_aug)
+        1. / 255.)(layer_input_aug)
 
     # 构造Model的pipline
     # ---------------------
@@ -94,22 +96,25 @@ def build_model(verbose=False, is_compile=True, **kwargs):
 
     if is_compile:
         model.compile(
-            loss='binary_crossentropy',
-            optimizer=Adam(0.00005),
+            loss='categorical_crossentropy',
+            optimizer=Adam(0.001),
             metrics=['acc'])
 
     return model
 
 
 def load_preprocess_image(image_size=None):
-    '''Load a single image.'''
+    '''通过闭包实现参数化的Image loading。'''
 
     def fcn(path=None):
         image = tf.io.read_file(path)
-        image = tf.image.decode_jpeg(image, channels=3)
+        image = tf.cond(
+            tf.image.is_jpeg(image),
+            lambda: tf.image.decode_jpeg(image, channels=3),
+            lambda: tf.image.decode_gif(image)[0])
         image = tf.image.resize(image, image_size)
-        return image
 
+        return image
     return fcn
 
 
@@ -117,59 +122,96 @@ if __name__ == '__main__':
     # 全局化的参数列表
     # ---------------------
     IMAGE_SIZE = (224, 224)
-    BATCH_SIZE = 32
-    NUM_EPOCHS = 0
+    BATCH_SIZE = 64
+    NUM_EPOCHS = 128
     EARLY_STOP_ROUNDS = 10
-    MODEL_NAME = 'resnet50v2_gv100'
+    MODEL_NAME = 'resnet50v2_iccv2021_rtx3090'
     CKPT_PATH = './ckpt/{}/'.format(MODEL_NAME)
 
-    IS_TRAIN_FROM_CKPT = True
-    IS_SEND_MSG_TO_DINGTALK = False
-    IS_DEBUG = True
+    IS_TRAIN_FROM_CKPT = False
+    IS_SEND_MSG_TO_DINGTALK = True
+    IS_DEBUG = False
 
     if IS_DEBUG:
         TRAIN_PATH = './data/Train_debug/'
         VALID_PATH = './data/Val_debug/'
         TEST_PATH = './data/Test_debug/Public_test_new/'
-        N_CLASSES = len(os.listdir(TRAIN_PATH))
     else:
         TRAIN_PATH = './data/Train/'
         VALID_PATH = './data/Val/'
         TEST_PATH = './data/Test/Public_test_new/'
-        N_CLASSES = 21
+    N_CLASSES = len(os.listdir(TRAIN_PATH))
 
     # 利用tensorflow的preprocessing方法读取数据集
     # ---------------------
-    train_ds = tf.keras.preprocessing.image_dataset_from_directory(
-        TRAIN_PATH,
-        label_mode='categorical',
-        shuffle=True,
-        validation_split=0,
-        seed=GLOBAL_RANDOM_SEED,
-        image_size=IMAGE_SIZE,
-        batch_size=BATCH_SIZE
+    train_file_full_name_list = []
+    train_label_list = []
+    for dir_name in os.listdir(TRAIN_PATH):
+        full_path_name = os.path.join(TRAIN_PATH, dir_name)
+        for file_name in os.listdir(full_path_name):
+            train_file_full_name_list.append(
+                os.path.join(full_path_name, file_name)
+            )
+            train_label_list.append(int(dir_name))
+    train_label_oht_array = np.array(train_label_list)
+
+    val_file_full_name_list = []
+    val_label_list = []
+    for dir_name in os.listdir(VALID_PATH):
+        full_path_name = os.path.join(VALID_PATH, dir_name)
+        for file_name in os.listdir(full_path_name):
+            val_file_full_name_list.append(
+                os.path.join(full_path_name, file_name)
+            )
+            val_label_list.append(int(dir_name))
+    val_label_oht_array = np.array(val_label_list)
+
+    # Encoding labels
+    encoder = OneHotEncoder(sparse=False)
+    train_label_oht_array = encoder.fit_transform(
+        train_label_oht_array.reshape(-1, 1)
     )
-    val_ds = tf.keras.preprocessing.image_dataset_from_directory(
-        VALID_PATH,
-        label_mode='categorical',
-        shuffle=True,
-        validation_split=0,
-        seed=GLOBAL_RANDOM_SEED,
-        image_size=IMAGE_SIZE,
-        batch_size=BATCH_SIZE
+    val_label_oht_array = encoder.fit_transform(
+        val_label_oht_array.reshape(-1, 1)
     )
 
-    train_ds = train_ds.prefetch(buffer_size=64)
-    val_ds = val_ds.prefetch(buffer_size=64)
+    # Construct training dataset
+    load_preprocess_train_image = load_preprocess_image(image_size=IMAGE_SIZE)
 
-    # plt.figure(figsize=(10, 10))
-    # for images, labels in train_ds.take(1):
-    #     for i in range(9):
-    #         ax = plt.subplot(3, 3, i + 1)
-    #         plt.imshow(images[i].numpy().astype('uint8'))
-    #         plt.title(int(labels[i]))
-    #         plt.axis('off')
-    # plt.tight_layout()
+    train_path_ds = tf.data.Dataset.from_tensor_slices(train_file_full_name_list)
+    train_img_ds = train_path_ds.map(
+        load_preprocess_train_image, num_parallel_calls=mp.cpu_count()
+    )
+    train_label_ds = tf.data.Dataset.from_tensor_slices(train_label_oht_array)
+
+    train_ds = tf.data.Dataset.zip((train_img_ds, train_label_ds))
+
+    # Construct validation dataset
+    val_path_ds = tf.data.Dataset.from_tensor_slices(val_file_full_name_list)
+    val_img_ds = val_path_ds.map(
+        load_preprocess_train_image, num_parallel_calls=mp.cpu_count()
+    )
+    val_label_ds = tf.data.Dataset.from_tensor_slices(val_label_oht_array)
+
+    val_ds = tf.data.Dataset.zip((val_img_ds, val_label_ds))
+
+    # Performance
+    train_ds = train_ds.shuffle(buffer_size=int(16 * BATCH_SIZE))
+    train_ds = train_ds.batch(BATCH_SIZE).prefetch(2 * BATCH_SIZE)
+    val_ds = val_ds.batch(BATCH_SIZE).prefetch(2 * BATCH_SIZE)
+
+    # 随机可视化几张图片
+    IS_RANDOM_VISUALIZING_PLOTS = False
+
+    if IS_RANDOM_VISUALIZING_PLOTS:
+        plt.figure(figsize=(10, 10))
+        for images, labels in train_ds.take(1):
+            for i in range(9):
+                ax = plt.subplot(3, 3, i + 1)
+                plt.imshow(images[i].numpy().astype('uint8'))
+                plt.title(int(labels[i]))
+                plt.axis('off')
+        plt.tight_layout()
 
     # 构造与编译Model，并添加各种callback
     # ---------------------
@@ -191,8 +233,8 @@ if __name__ == '__main__':
             save_best_only=True),
         tf.keras.callbacks.ReduceLROnPlateau(
                 monitor='val_acc',
-                factor=0.5,
-                patience=3,
+                factor=0.2,
+                patience=2,
                 min_lr=0.0000003),
         RemoteMonitorDingTalk(
             is_send_msg=IS_SEND_MSG_TO_DINGTALK,
@@ -243,8 +285,8 @@ if __name__ == '__main__':
         load_preprocess_test_image,
         num_parallel_calls=mp.cpu_count()
     )
-    test_ds = test_ds.batch(32)
-    test_ds = test_ds.prefetch(buffer_size=64)
+    test_ds = test_ds.batch(BATCH_SIZE)
+    test_ds = test_ds.prefetch(buffer_size=int(BATCH_SIZE * 2))
     test_pred_proba = model.predict(test_ds)
 
     test_pred_df = pd.DataFrame(
