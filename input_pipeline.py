@@ -29,7 +29,7 @@ GLOBAL_RANDOM_SEED = 65535
 np.random.seed(GLOBAL_RANDOM_SEED)
 tf.random.set_seed(GLOBAL_RANDOM_SEED)
 
-GPU_ID = 1
+GPU_ID = 0
 
 gpus = tf.config.experimental.list_physical_devices('GPU')
 if gpus:
@@ -60,21 +60,12 @@ def build_model(verbose=False, is_compile=True, **kwargs):
     # ---------------------
     layer_input = keras.Input(shape=input_shape, name='layer_input')
 
-    layer_data_augmentation = keras.Sequential(
-        [
-            layers.experimental.preprocessing.RandomFlip('horizontal'),
-            layers.experimental.preprocessing.RandomRotation(0.2),
-        ])
-    layer_input_aug = layer_data_augmentation(layer_input)
-    layer_input_aug = layers.experimental.preprocessing.Rescaling(
-        1. / 255.)(layer_input_aug)
-
     # 构造Model的pipline
     # ---------------------
     if 'resnet50' in network_type: 
-        x = build_model_resnet50_v2(layer_input_aug)
+        x = build_model_resnet50_v2(layer_input)
     elif 'resnet101' in network_type:
-        x = build_model_resnet101_v2(layer_input_aug)
+        x = build_model_resnet101_v2(layer_input)
 
     x = layers.GlobalAveragePooling2D()(x)
     if n_classes == 2:
@@ -97,7 +88,7 @@ def build_model(verbose=False, is_compile=True, **kwargs):
     if is_compile:
         model.compile(
             loss='categorical_crossentropy',
-            optimizer=Adam(0.001),
+            optimizer=Adam(0.0001),
             metrics=['acc'])
 
     return model
@@ -113,6 +104,7 @@ def load_preprocess_image(image_size=None):
             lambda: tf.image.decode_jpeg(image, channels=3),
             lambda: tf.image.decode_gif(image)[0])
         image = tf.image.resize(image, image_size)
+        image = layers.experimental.preprocessing.Rescaling(1. / 255.)(image)
 
         return image
     return fcn
@@ -124,7 +116,7 @@ if __name__ == '__main__':
     IMAGE_SIZE = (224, 224)
     BATCH_SIZE = 64
     NUM_EPOCHS = 128
-    EARLY_STOP_ROUNDS = 10
+    EARLY_STOP_ROUNDS = 7
     MODEL_NAME = 'resnet50v2_iccv2021_rtx3090'
     CKPT_PATH = './ckpt/{}/'.format(MODEL_NAME)
 
@@ -196,7 +188,7 @@ if __name__ == '__main__':
     val_ds = tf.data.Dataset.zip((val_img_ds, val_label_ds))
 
     # Performance
-    train_ds = train_ds.shuffle(buffer_size=int(16 * BATCH_SIZE))
+    train_ds = train_ds.shuffle(buffer_size=int(32 * BATCH_SIZE))
     train_ds = train_ds.batch(BATCH_SIZE).prefetch(2 * BATCH_SIZE)
     val_ds = val_ds.batch(BATCH_SIZE).prefetch(2 * BATCH_SIZE)
 
@@ -233,7 +225,7 @@ if __name__ == '__main__':
             save_best_only=True),
         tf.keras.callbacks.ReduceLROnPlateau(
                 monitor='val_acc',
-                factor=0.2,
+                factor=0.7,
                 patience=2,
                 min_lr=0.0000003),
         RemoteMonitorDingTalk(
