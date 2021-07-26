@@ -156,16 +156,16 @@ if __name__ == '__main__':
     BATCH_SIZE = 32
     NUM_EPOCHS = 128
     EARLY_STOP_ROUNDS = 5
-    TTA_ROUNDS = 5
+    TTA_ROUNDS = 20
 
-    MODEL_NAME = 'EfficentNetB0_rtx3090'
-    MODEL_LR = 0.00007
+    MODEL_NAME = 'EfficentNetB5_rtx3090'
+    MODEL_LR = 0.0003
     MODEL_LABEL_SMOOTHING = 0
 
     CKPT_DIR = './ckpt/'
     CKPT_FOLD_NAME = '{}_GPU_{}_{}'.format(TASK_NAME, GPU_ID, MODEL_NAME)
 
-    IS_DEBUG = False
+    IS_DEBUG = True
     IS_TRAIN_FROM_CKPT = False
     IS_SEND_MSG_TO_DINGTALK = False
     IS_RANDOM_VISUALIZING_PLOTS = False
@@ -206,10 +206,12 @@ if __name__ == '__main__':
 
     # Encoding labels
     encoder = OneHotEncoder(sparse=False)
-    train_label_oht_array = encoder.fit_transform(
+    encoder.fit(train_label_oht_array.reshape(-1, 1))
+
+    train_label_oht_array = encoder.transform(
         train_label_oht_array.reshape(-1, 1)
     )
-    val_label_oht_array = encoder.fit_transform(
+    val_label_oht_array = encoder.transform(
         val_label_oht_array.reshape(-1, 1)
     )
 
@@ -277,7 +279,7 @@ if __name__ == '__main__':
         tf.keras.callbacks.ReduceLROnPlateau(
                 monitor='val_acc',
                 factor=0.7,
-                patience=3,
+                patience=2,
                 min_lr=0.0000003),
     ]
 
