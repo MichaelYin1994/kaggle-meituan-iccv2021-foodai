@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import OneHotEncoder, LabelBinarizer
 from tensorflow import keras
 from tensorflow.keras import Model, layers
 from tensorflow.keras.optimizers import Adam
@@ -152,12 +152,12 @@ def load_preprocessing_img(image_size, stage):
 if __name__ == '__main__':
     # 全局化的参数列表
     # ---------------------
-    IMAGE_SIZE = (224, 224)
+    IMAGE_SIZE = (128, 128)
     BATCH_SIZE = 32
     NUM_EPOCHS = 128
     EARLY_STOP_ROUNDS = 5
     TTA_ROUNDS = 20
-    MIN_CLASS_ID, MAX_CLASS_ID = 300, 400
+    MIN_CLASS_ID, MAX_CLASS_ID = 0, 1000
 
     MODEL_NAME = 'EfficentNetB0_rtx3090'
     MODEL_LR = 0.00003
@@ -197,7 +197,7 @@ if __name__ == '__main__':
                 os.path.join(full_path_name, file_name)
             )
             train_label_list.append(int(dir_name))
-    train_label_oht_array = np.array(train_label_list)
+    train_label_array = np.array(train_label_list)
 
     val_file_full_name_list = []
     val_label_list = []
@@ -213,9 +213,23 @@ if __name__ == '__main__':
                 os.path.join(full_path_name, file_name)
             )
             val_label_list.append(int(dir_name))
-    val_label_oht_array = np.array(val_label_list)
+    val_label_array = np.array(val_label_list)
 
-    # Encoding labels
+    # 进行标签编码
+    # ---------------------
+    train_label_oht_array = np.zeros(
+        (len(train_file_full_name_list), N_CLASSES)
+    )
+    for row, col in enumerate(train_label_array):
+        train_label_oht_array[row, col] = 1
+
+    val_label_oht_array = np.zeros(
+        (len(val_file_full_name_list), N_CLASSES)
+    )
+    for row, col in enumerate(val_label_array):
+        val_label_oht_array[row, col] = 1
+
+    '''
     encoder = OneHotEncoder(sparse=False)
     encoder.fit(train_label_oht_array.reshape(-1, 1))
 
@@ -225,6 +239,7 @@ if __name__ == '__main__':
     val_label_oht_array = encoder.transform(
         val_label_oht_array.reshape(-1, 1)
     )
+    '''
 
     processor_train_image = load_preprocessing_img(
         image_size=IMAGE_SIZE,
