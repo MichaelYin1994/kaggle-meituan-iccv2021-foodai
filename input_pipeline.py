@@ -157,15 +157,16 @@ if __name__ == '__main__':
     NUM_EPOCHS = 128
     EARLY_STOP_ROUNDS = 5
     TTA_ROUNDS = 20
+    MIN_CLASS_ID, MAX_CLASS_ID = 300, 400
 
-    MODEL_NAME = 'EfficentNetB5_rtx3090'
-    MODEL_LR = 0.0003
+    MODEL_NAME = 'EfficentNetB0_rtx3090'
+    MODEL_LR = 0.00003
     MODEL_LABEL_SMOOTHING = 0
 
     CKPT_DIR = './ckpt/'
     CKPT_FOLD_NAME = '{}_GPU_{}_{}'.format(TASK_NAME, GPU_ID, MODEL_NAME)
 
-    IS_DEBUG = True
+    IS_DEBUG = False
     IS_TRAIN_FROM_CKPT = False
     IS_SEND_MSG_TO_DINGTALK = False
     IS_RANDOM_VISUALIZING_PLOTS = False
@@ -178,13 +179,18 @@ if __name__ == '__main__':
         TRAIN_PATH = './data/Train/'
         VALID_PATH = './data/Val/'
         TEST_PATH = './data/Test/Public_test_new/'
-    N_CLASSES = len(os.listdir(TRAIN_PATH))
 
     # 利用tensorflow的preprocessing方法读取数据集
     # ---------------------
     train_file_full_name_list = []
     train_label_list = []
-    for dir_name in os.listdir(TRAIN_PATH):
+
+    train_fold_names = sorted(list(map(lambda x: int(x), os.listdir(TRAIN_PATH))))
+    train_fold_names = train_fold_names[MIN_CLASS_ID:MAX_CLASS_ID]
+    train_fold_names = [str(item) for item in train_fold_names]
+    N_CLASSES = len(train_fold_names)
+
+    for dir_name in train_fold_names:
         full_path_name = os.path.join(TRAIN_PATH, dir_name)
         for file_name in os.listdir(full_path_name):
             train_file_full_name_list.append(
@@ -195,7 +201,12 @@ if __name__ == '__main__':
 
     val_file_full_name_list = []
     val_label_list = []
-    for dir_name in os.listdir(VALID_PATH):
+
+    val_fold_names = sorted(list(map(lambda x: int(x), os.listdir(VALID_PATH))))
+    val_fold_names = val_fold_names[MIN_CLASS_ID:MAX_CLASS_ID]
+    val_fold_names = [str(item) for item in val_fold_names]
+
+    for dir_name in val_fold_names:
         full_path_name = os.path.join(VALID_PATH, dir_name)
         for file_name in os.listdir(full_path_name):
             val_file_full_name_list.append(
